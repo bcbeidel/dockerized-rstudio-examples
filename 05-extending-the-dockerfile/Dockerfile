@@ -9,7 +9,7 @@ RUN echo "session-default-working-dir=${APP_ROOT}" >> /etc/rstudio/rsession.conf
 LABEL org.bcbeidel.image.authors="Brandon Beidel" \
       org.bcbeidel.image.title="rocker-extending-the-dockerfile" \
       org.bcbeidel.image.description="Example Development Environment" \
-      org.bcbeidel.image.source="https://github.com/bcbeidel/https://github.com/bcbeidel/realizing-reproducible-r"
+      org.bcbeidel.image.source="https://github.com/bcbeidel/realize-reproducible-r"
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \

@@ -9,7 +9,7 @@
         ports:
           - 8787:8787
         volumes:
-          - ~/git/realizing-reproducible-r/05-extending-the-dockerfile/:/home/rstudio/05-extending-the-dockerfile
+          - ~/git/realize-reproducible-r/05-extending-the-dockerfile/:/home/rstudio/05-extending-the-dockerfile
           - ~/Library/ApplicationSupport/renv:/home/rstudio/.local/share/renv
         environment:
             - PASSWORD=mypass

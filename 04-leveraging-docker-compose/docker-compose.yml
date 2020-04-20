@@ -1,0 +1,12 @@
+# docker-compose.yaml
+---
+    version: '3'
+    services:
+      rstudio:
+        image: rocker/rstudio:3.6.2
+        ports:
+          - 8787:8787
+        volumes:
+          - ~/git/realizing-reproducible-r/04-leveraging-docker-compose:/home/rstudio/04-leveraging-docker-compose
+        environment:
+            - PASSWORD=mypassword

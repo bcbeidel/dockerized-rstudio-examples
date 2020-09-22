@@ -1,5 +1,3 @@
 # realize-reproducible-r
 
-Realize Reproducible R
-
-Slides - <https://bcblog.netlify.app/slides/reproducibility/realize-reproducible-r.html>
+Presentation on the use of containerization and package management with R.

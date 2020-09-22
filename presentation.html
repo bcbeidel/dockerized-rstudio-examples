@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Realize Reproducible R</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Brandon Beidel" />
+    <script src="libs/header-attrs-2.3/header-attrs.js"></script>
+    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link href="libs/remark-css-0.0.1/default-fonts.css" rel="stylesheet" />
+    <link rel="stylesheet" href="style/custom.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Realize Reproducible R
+## <a href="https://github.com/bcbeidel/realize-reproducible-r">bcbeidel/realize-reproducible-r</a>
+### Brandon Beidel
+### 2020/04/21
+
+---
+
+class: center middle inverse
+
+## "It works on my machine."
+
+???
+
+- This statement actively made my hair stand on end when I joined RV two years ago
+- Critical ML systems in R had limited redundancy, a few data science laptops
+- Difficult to recreate the errors in production systems on AWS
+- Collaborating on these application required a multi-day slog against rJava...
+- Project setup was a multi-day task,
+
+My Goal
+
+- Fast setup for new teammates, 20 minutes or less
+- Consistent environments between local, development, staging, and production
+- Clear articulation of system and packages dependencies
+
+---
+
+## Challenges Making R Reproducible
+
+.pull-left[
+.large[
+Problem Area
+
+- Machine/OS
+
+- R Installation
+
+- Package Versions
+]]
+
+.pull-right[
+.large[
+Tool(s)
+
+- [Docker](https://www.docker.com/)
+
+- [rocker](https://www.rocker-project.org/)
+
+- [renv](https://github.com/rstudio/renv)
+]]
+
+???
+
+- High level buckets of problems we experienced managing R in production
+- Over the next few slides, we are going to slowly build into to creating a more reproducible environment with these tools.
+
+---
+## Docker: Blueprints for Reproducible Computing
+
+![Blueprint](./img/blueprint.jpg)
+
+Check out an example [here](https://hub.docker.com/r/rocker/rstudio/dockerfile).
+
+???
+
+Multiple bits of terminology to consider; 
+
+- Dockerfile - recipe for creating Docker images
+- Images - image gets built by running a Docker command (which uses that Dockerfile)
+- Containers - a running instance of a Docker image.
+
+Primary take-away; Docker builds pre-defined computers in a repeatable way.
+
+---
+## rocker: RStudio on Docker
+
+```shell
+$ docker run --rm \
+         -e PASSWORD=&lt;your-password&gt; \
+         -p 8787:8787 \
+         rocker/rstudio
+```
+
+.footnote[&lt;hr&gt;
+With [Docker](https://docs.docker.com/install/) installed, run the command above and navigate to  &lt;http://localhost:8787/&gt; in any browser. Press `ctrl` + `C` in the terminal to stop the container.
+]
+
+???
+
+What is going on here?
+
+1. Taking the image `rocker/rstudio` defined by the rocker-project
+2. Creating and running a container that matches that image
+3. Injecting a password and port
+4. `--rm` cleans up the container when we exit
+
+---
+## rocker: Locking in a R Version
+
+```shell
+$ docker run --rm \
+         -e PASSWORD=&lt;your-password&gt; \
+         -p 8787:8787 \
+         rocker/rstudio:3.6.2
+```
+
+.footnote[&lt;hr&gt;
+The [rocker-project](https://www.rocker-project.org/images/) provides some images that accept a version tag specifying which version of R is desired, e.g. `rocker/rstudio:3.6.2` for R `3.6.2`.
+]
+
+---
+## Docker Volumes: Sharing File systems with a Container
+
+```shell
+$ docker run --rm \
+         -e PASSWORD=&lt;your-password&gt; \
+         -p 8787:8787 \
+         -v ~/Documents:/home/rstudio/Documents \
+         rocker/rstudio:3.6.2
+```
+
+.footnote[&lt;hr&gt;
+In this command, we have mounted a [shared volume](https://www.rocker-project.org/use/shared_volumes/) to share files between our container and host system, specifically the `Documents` directory.
+]
+
+???
+
+Note: This ensures that our code changes will persist when we close the container.
+
+---
+class: center middle inverse
+
+![This is looking complicated](./img/Rube-Goldberg-Machine.jpeg)
+
+???
+
+- The docker command is becoming unwieldy to type every-time.
+- Can we automate, abstract or codify this complexity?
+- The answer is yes.
+
+---
+## Docker Compose: Container Configuration in a File
+
+```yaml
+# docker-compose.yaml
+---
+version: '3'
+
+services:
+  rstudio:
+    image: rocker/rstudio:3.6.2
+    ports:
+      - 8787:8787
+    volumes:
+      - ~/&lt;path-to-project&gt;/&lt;project&gt;:/home/rstudio/&lt;project&gt;
+    environment:
+        - PASSWORD=&lt;your-password&gt;
+```
+
+.footnote[
+&lt;hr&gt;
+[Docker Compose](https://docs.docker.com/compose/) serves as a mechanism to orchestrate one (or many) containers consistently with a single command. `docker-compose up --build`
+]
+
+???
+
+This captures all of our command configurations, and turns it into a file which we can share and add to source control, ideal for reproducible code.
+
+---
+## renv: a Package to Manage R Packages
+
+`renv` intends to help create more reproducible environment for R Projects.
+
+- Creates an isolated, private package library for each project
+
+- Captures requirements for restoration in a `renv.lock`
+
+- leverages a global cache to reduce redundant downloads
+
+???
+
+- `renv` is RStudio's successor to packrat
+- `renv.lock` should be reminiscent of other lock files like a python `requirements.txt`
+
+---
+## renv: Important Commands
+
+.pull-left[
+Install `renv`
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+Initialize `renv` for a project
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+Activate a private renv library
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+Install a package
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+Capture the installed packages in the `renv.lock` file
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+Restore a renv environment to match `renv.lock` file
+]
+.pull-right[
+`install.packages("renv")`
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+`renv::init()`
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+`renv::activate()`
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+`renv::install("dplyr")` 
+&lt;br&gt;&lt;br&gt;&lt;br&gt;
+`renv::snapshot()`
+&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;br&gt;
+`renv::restore()`
+]
+
+???
+
+- When `renv` is active, using `install.packages` is a shim, and will still add things to `renv` 
+- Read the prompts, you can quickly wipe an environment if you are not careful
+- `renv::restore()` is your friend.
+
+---
+## renv: Tracking Packages with renv.lock
+
+```json
+{
+  "R": {
+    "Version": "3.6.2",
+    "Repositories": [
+      {
+        "Name": "CRAN",
+        "URL": "https://cran.rstudio.com"
+      }
+    ]
+  },
+  "Packages": {
+    "dplyr": {
+      "Package": "dplyr",
+      "Version": "0.8.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3ecb1deedd4c4ad6ebf4605d263616f2"
+    },
+    ...
+  }
+}
+```
+
+???
+
+Things to note for `renv.lock`
+
+- Keeps track of the R version
+- allows for custom CRAN-like repositories or local installs
+- hash is used to ensure code is the same (even if version hasn't moved...)
+
+---
+## renv &amp; Docker: Sharing Global Cache For Speed
+
+```yaml
+# docker-compose.yaml
+---
+version: '3'
+
+services:
+  rstudio:
+    image: rocker/rstudio:3.6.2
+    ports:
+      - 8787:8787
+    volumes:
+      - ~/&lt;path-to-project&gt;/&lt;project&gt;:/home/rstudio/&lt;project&gt;
+      - ~/Library/ApplicationSupport/renv:/home/rstudio/.local/share/renv
+    environment:
+        - PASSWORD=&lt;your-password&gt;
+```
+
+.footnote[&lt;hr&gt;
+The global cache path for `renv` is [different for each OS](https://rstudio.github.io/renv/reference/paths.html#details)
+]
+
+???
+
+- The global cache-path is OS Specific, check the reference docs for most recent base location.
+- The cache is the first place `renv` will look, if it finds the package/version/os combo, it uses the cache
+
+---
+## Extending the Dockerfile environment
+
+```Dockerfile
+FROM rocker/rstudio:3.6.2
+
+WORKDIR /home/rstudio/&lt;project&gt;
+
+# Install renv, provide consent to manipulate file system
+RUN R -e "install.packages('remotes');"
+RUN R -e "remotes::install_github('rstudio/renv@0.9.2-5');"
+RUN R -e "library(renv);"
+
+# Restore pkgs with renv; uncomment if you have a `renv.lock` file
+# COPY renv.lock renv.lock
+# RUN R -e "renv::activate();"
+# RUN R -e "renv::restore(confirm = FALSE);"
+
+CMD ["/init"]
+```
+
+.footnote[&lt;hr&gt;
+You can make changes to your environment with a custom [`Dockerfile`](https://rstudio.github.io/renv/articles/docker.html) like the one above.
+]
+
+???
+
+What is going on in this file?
+
+- Extend the rocker image
+- Set the home directory to the project directory
+- Install `remotes`, then `renv`.
+- Use `renv` to restore a local, private R library
+- Set the command for start-up
+
+---
+## Putting it all together with docker-compose
+
+```yaml
+# docker-compose.yaml
+---
+version: '3'
+
+services:
+  rstudio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 8787:8787
+    volumes:
+      - ~/&lt;path-to-project&gt;/&lt;project&gt;:/home/rstudio/&lt;project&gt;
+      - ~/Library/ApplicationSupport/renv:/home/rstudio/.local/share/renv
+    environment:
+        - PASSWORD=&lt;your-password&gt;
+```
+
+.footer[&lt;hr&gt;
+The docker-compose file is now looking for a `Dockerfile` in the same directory.  We can now build our own custom image and launch an identical container.
+]
+
+???
+
+When captured in source control, can be used to ensure that every user of your project
+
+---
+class: center middle
+
+![Why should we do this?](./img/could-should.jpg)
+
+???
+
+## This was the route we went down because:
+
+1. Our org has shown no appetite for hosted solutions of RStudio Server
+2. Our code runs in production and has to be identical in all environments
+3. Our projects change hands frequently, set-up needs to be done quickly and be self-service
+
+If I had enough R users, I would push for paying for RStudio Server.
+
+## My Personal Critiques Of This Workflow
+
+1. Running `renv::restore` during the container build is still slow (no cache)
+2. `docker-compose` is still complex, and leads to lots of questions and explanations
+3. Memory limits in Docker make containers small by default, (check the Docker UI to get more memory)
+
+---
+class: middle
+
+.center[
+# Thanks!
+
+### [bcbeidel/realize-reproducible-r](https://github.com/bcbeidel/realize-reproducible-r)
+]
+
+.footnote[&lt;hr&gt;
+[linkedin.com/in/brandonbeidel](https://www.linkedin.com/in/brandonbeidel)
+]
+
+---
+## Additional Resources
+
+- Docker: a tool to generate, deploy and manage containers
+  - &lt;https://docs.docker.com/&gt;
+- Docker Hub: a container sharing service
+  - &lt;https://hub.docker.com/&gt;
+- Docker Compose: a tool for running Docker containers
+  - &lt;https://docs.docker.com/compose/&gt;
+- Docker Volumes: persisting data used by docker containers
+  - &lt;https://docs.docker.com/storage/volumes/&gt;
+- RStudio: Environment Management with Docker
+  - &lt;https://environments.rstudio.com/docker&gt;
+- Rocker Project: Docker Containers for R
+  - &lt;https://www.rocker-project.org/&gt;
+- renv: a dependency management system for R
+  - &lt;https://rstudio.github.io/renv/articles/renv.html&gt;
+- renv and Docker
+  - &lt;https://rstudio.github.io/renv/articles/docker.html&gt;
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
